@@ -86,7 +86,7 @@ if _G.charSelect.character_add_course_texture ~= nil then
     _G.charSelect.character_add_course_texture(CT_SQUISHY, COURSE_SQUISHY)
 end
 
-CT_SHELL = _G.charSelect.character_add("Shell", "Pretty ladyy", "Squishy / SprSn64", "9D94FF", E_MODEL_SHELL, CT_LUIGI, "S", 1)
+CT_SHELL = _G.charSelect.character_add("Shell", "Pretty ladyy", "Squishy / SprSn64", "9D94FF", E_MODEL_SHELL, CT_LUIGI, "S", 1.05)
 _G.charSelect.character_add_palette_preset(E_MODEL_SHELL, PALETTE_SHELL)
 
 local MOD_NAME = "Squishy Pack"
