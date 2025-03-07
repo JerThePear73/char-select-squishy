@@ -65,6 +65,7 @@ end
 end
 
 gPlayerSyncTable[0].squishyHasShell = false
+gPlayerSyncTable[0].spamBurnout = 0
 
 local spamBurnoutMax = 100
 >>>>>>> fad8d17 (Made koopa shell state use player sync table)
@@ -174,7 +175,20 @@ local function squishy_has_koopa_shell(m, setShellState)
     end
 end
 
->>>>>>> fad8d17 (Made koopa shell state use player sync table)
+local function update_spam_burnout(m, burnTimer)
+    local e = gSquishyExtraStates[m.playerIndex]
+    if m.playerIndex == 0 then
+        if burnTimer == nil then
+            return e.spamBurnout
+        else
+            e.spamBurnout = burnTimer
+            gPlayerSyncTable[0].spamBurnout = burnTimer
+        end
+    else
+        return gPlayerSyncTable[m.playerIndex].spamBurnout
+    end
+end
+
 ----------------------------------------
 -- Ported n' Modified Mario Functions --
 ----------------------------------------
@@ -808,6 +822,31 @@ local function act_squishy_water_pound(m)
         m.vel.z = 0
     end
 
+    m.actionTimer = m.actionTimer + 1
+
+    if (m.health < 0x100) then
+        if (m.playerIndex ~= 0) then
+            -- never kill remote marios
+            m.health = 0x100;
+        else
+            if (mario_can_bubble(m)) then
+                m.health = 0xFF;
+                mario_set_bubbled(m);
+            else
+                level_trigger_warp(m, WARP_OP_DEATH);
+            end
+        end
+        update_spam_burnout(m, 0)
+    elseif update_spam_burnout(m) <= 0 then
+        set_mario_action(m, ACT_FREEFALL, 0)
+    end
+
+    m.marioBodyState.eyeState = MARIO_EYES_DEAD;
+end
+
+--[[
+--- @param m MarioState
+local function update_mario_water_health(m)
     if (m.area.terrainType & TERRAIN_MASK) == TERRAIN_SNOW then
         m.health = m.health - math.max(e.forwardVelStore/5, 3)
     else
@@ -1265,14 +1304,14 @@ local function squishy_update(m)
         m.pos.y = math.max(m.pos.y - m.floorHeight, 1000) + m.floorHeight -- Force spawn height
         set_mario_action(m, ACT_SQUISHY_GROUND_POUND, 1)
     end
-    if e.spamBurnout > 0 then
+    if update_spam_burnout(m) > 0 then
         if (m.flags & MARIO_METAL_CAP == 0) then
             m.particleFlags = PARTICLE_FIRE
             m.health = m.health - 10
         end
         play_sound(SOUND_AIR_BLOW_FIRE, m.pos)
         if (m.input & INPUT_A_PRESSED ~= 0 or m.input & INPUT_B_PRESSED ~= 0 or m.input & INPUT_Z_PRESSED ~= 0) then
-            e.spamBurnout = e.spamBurnout - 1
+            update_spam_burnout(m, e.spamBurnout - 2)
             play_sound(SOUND_GENERAL_FLAME_OUT, m.pos)
         end
         if m.health < 255 then
@@ -1281,8 +1320,9 @@ local function squishy_update(m)
         end
         if (m.waterLevel ~= nil and m.pos.y < m.waterLevel) then
             play_sound(SOUND_GENERAL_FLAME_OUT, m.pos)
-            e.spamBurnout = 0
+            update_spam_burnout(m, 0)
         end
+        update_spam_burnout(m, e.spamBurnout - 1)
     end
     if omm_moveset_enabled(m) then
         if m.input & INPUT_Z_PRESSED ~= 0 then
@@ -1346,7 +1386,7 @@ local function squishy_before_action(m, nextAct)
         return set_mario_action(m, ACT_SQUISHY_LONG_JUMP, 0)
     end
     if (nextAct == ACT_BURNING_FALL or nextAct == ACT_BURNING_GROUND or nextAct == ACT_BURNING_JUMP or nextAct == ACT_LAVA_BOOST) and m.health > 255 then
-        e.spamBurnout = 15
+        update_spam_burnout(m, spamBurnoutMax)
         m.hurtCounter = 0
         return set_mario_action_and_y_vel(m, ACT_SQUISHY_FIRE_BURN, 0, 90)
     end
@@ -1461,20 +1501,31 @@ local function squishy_before_phys_step(m)
 end
 
 local function hud_render()
-    local m = gMarioStates[0]
-    local e = gExtraStates[0]
     djui_hud_set_resolution(RESOLUTION_N64)
-    local burning = e.spamBurnout/15
-    if burning > 0 then
-        djui_hud_set_color(0, 0, 0, 200)
-        djui_hud_render_rect(16, 30, 6, 25)
-        djui_hud_set_color(255, 20, 0, 255)
-        djui_hud_render_rect(17, 31, 4, 23*burning)
+
+    for i = 0, MAX_PLAYERS - 1 do
+        local m = gMarioStates[i]
+        local e = gSquishyExtraStates[i]
+
+        local width = djui_hud_get_screen_width()
+        local height = djui_hud_get_screen_height()
+
+        local burning = update_spam_burnout(m)/spamBurnoutMax
+        if burning > 0 then
+            local pos = {x = 0, y = 0, z = 0}
+            djui_hud_world_pos_to_screen_pos(m.pos, pos)
+            pos.x = pos.x + 20
+            pos.y = pos.y - 20
+            djui_hud_set_color(0, 0, 0, 200)
+            djui_hud_render_rect(pos.x, pos.y, 6, 25)
+            djui_hud_set_color(255, 20, 0, 255)
+            djui_hud_render_rect(pos.x + 1, pos.y + 1, 4, 23*burning)
+        end
     end
 end
 
 local function level_init()
-    gExtraStates[0].spamBurnout = 0
+    update_spam_burnout(gMarioStates[0])
 end
 
 local function on_interact(m, obj, type)
